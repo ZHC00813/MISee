@@ -4,6 +4,8 @@ Windows 文件夹比对与局部更新工具。以母文件夹为标准，复用
 
 当前版本：**0.7.0** · C# / .NET 10 / Windows Forms
 
+[下载 Windows 版本](https://github.com/ZHC00813/MISee/releases/latest) · [自动构建与测试](https://github.com/ZHC00813/MISee/actions/workflows/windows.yml)
+
 ![MISee 差异预览](docs/images/ui-overview.png)
 
 ## 功能

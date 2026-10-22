@@ -74,6 +74,10 @@ internal static class SmartTest
             Directory.Delete(System.IO.Path.Combine(pair.M, "replace"), true); Put(pair.M, "replace\\new.txt", "new"); Thread.Sleep(250);
             var replaced = Engine.Analyze(pair.M, pair.C, "原处保留", cached);
             Check(replaced.M.ContainsKey("replace\\new.txt") && !replaced.M.ContainsKey("replace\\old.txt"), "同名目录删除再建也会重查内容，不能因目录已在索引中而跳过");
+            // Isolate loss recovery from delayed source-tree notifications: a safe
+            // fallback on that tree must not change this test's exact read counts.
+            pair = Pair("通知丢失回退"); Put(pair.C, "cached.txt", "cached-content");
+            Engine.Analyze(pair.M, pair.C, "原处保留", cached);
             Engine.InvalidateIndex(pair.C);
             Engine.Analyze(pair.M, pair.C, "原处保留", cached);
             Check(Engine.LastScan.EnumeratedFiles == 1 && Engine.LastScan.HashedFiles == 1, "通知丢失时退回元数据扫描并拒绝信任旧指纹");

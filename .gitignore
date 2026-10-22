@@ -1,0 +1,35 @@
+# Build, publish, generated experiments and reports
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+*.pdb
+*.zip
+*.lnk
+
+# IDE and machine-specific files
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+Thumbs.db
+Desktop.ini
+
+# Credentials and local environment
+.env
+.env.*
+*.pfx
+*.p12
+*.pem
+*.key
+
+# App-generated data must never be committed
+.MISee记录/
+额外资料（MISee）/
+Index-v1/
+*.log
+status.json
+plan.json
+resume-plan.json

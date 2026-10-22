@@ -1,0 +1,48 @@
+name: Windows build and tests
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build and run independent experiments
+        run: ./scripts/test.ps1
+      - name: Package Windows application
+        run: ./scripts/package.ps1
+      - name: Save test reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: misee-test-reports
+          path: |
+            artifacts/test-results/*.txt
+            artifacts/test-results/summary.json
+            artifacts/test-results/*.png
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Save application package
+        uses: actions/upload-artifact@v6
+        with:
+          name: misee-windows-x64
+          path: artifacts/packages/*
+          if-no-files-found: error
+          retention-days: 30

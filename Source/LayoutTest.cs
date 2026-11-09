@@ -17,7 +17,7 @@ public partial class MainForm
             bool Fits(Control parent,Control child) => child.Left>=0 && child.Top>=0 && child.Right<=parent.ClientSize.Width+1 && child.Bottom<=parent.ClientSize.Height+1;
             try
             {
-                master.Text="D:\\MISeeDemo\\MasterLibrary";child.Text="D:\\MISeeDemo\\ChildLibrary";
+                master.Text="F:\\文件\\项目设计资料\\标准资料库";child.Text="E:\\文件\\项目设计资料\\需要更新的资料";
                 var samples=new List<Change> {
                     new(){Action="新增",Path="产品资料\\用户手册.pdf",Detail="补充母文件夹中的缺失文件"},
                     new(){Action="更新",Path="项目预算.xlsx",Detail="母版本较新，更新前备份原版本"},
@@ -35,6 +35,7 @@ public partial class MainForm
                 advanced.PerformClick();await Save("界面-高级设置");
                 Check(advancedHost.Visible&&recheck.Visible&&quick.Visible,"展开后完整呈现校验、缓存和一键更新选项");
                 Check(Fits(quick.Parent!,quick)&&Fits(recheck.Parent!,recheck),"高级设置内容没有被容器裁切");
+                Check(recordsInChild.Visible&&Fits(recordsInChild.Parent!,recordsInChild),"记录位置选项完整显示");
                 ClientSize=new Size(980,680);await Save("界面-紧凑窗口");
                 Check(Fits(Controls[0],execute.Parent!.Parent!.Parent!),"紧凑窗口下底部任务区仍位于可见区域");
                 Check(Fits(execute.Parent!,execute)&&Fits(cancel.Parent!,cancel),"紧凑窗口下更新与中断按钮均可见");

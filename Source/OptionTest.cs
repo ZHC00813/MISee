@@ -22,7 +22,7 @@ internal static class OptionTest
         {
             var pair = Pair("跳过复核");
             Put(pair.M, "same.txt", "same"); Put(pair.C, "same.txt", "same");
-            Put(pair.M, "update.txt", "new", 3); Put(pair.C, "update.txt", "old", 1); Put(pair.M, "add.txt", "added");
+            Put(pair.M, "update.txt", "newer", 3); Put(pair.C, "update.txt", "old", 1); Put(pair.M, "add.txt", "added");
             var plan = Engine.Analyze(pair.M, pair.C, "原处保留");
             var states = new List<WorkProgress>();
             bool refused = false;
@@ -32,13 +32,13 @@ internal static class OptionTest
                 Check(refused, "旧调用签名默认仍进行整库复核，遇到无关文件占用会拒绝");
                 Put(pair.C, "unrelated.txt", "keep");
                 string record = Engine.Execute(plan, revalidate: false, detail: states.Add);
-                Check(File.ReadAllText(System.IO.Path.Combine(pair.C, "update.txt")) == "new" && File.ReadAllText(System.IO.Path.Combine(pair.C, "add.txt")) == "added", "关闭整库复核后可直接更新并新增文件");
+                Check(File.ReadAllText(System.IO.Path.Combine(pair.C, "update.txt")) == "newer" && File.ReadAllText(System.IO.Path.Combine(pair.C, "add.txt")) == "added", "关闭整库复核后可直接更新并新增文件");
                 Check(File.ReadAllText(System.IO.Path.Combine(record, "更新前备份", "update.txt")) == "old", "关闭复核仍保留覆盖前备份");
                 Check(File.ReadAllText(System.IO.Path.Combine(record, "执行记录.txt")).Contains("更新前重新校验：关闭"), "日志明确记录复核关闭模式");
             }
             Check(states.All(x => x.ReadBytes == 0 && !x.Stage.Contains("重新校验")) && states.Last().Fraction == 1, "关闭复核不重复读取整库内容，直接更新且进度正常结束");
             Check(File.ReadAllText(System.IO.Path.Combine(pair.C, "unrelated.txt")) == "keep", "关闭复核不触碰对比后出现的无关子文件");
-            var changed = Pair("待更新子文件变化"); Put(changed.M, "a.txt", "new", 3); Put(changed.C, "a.txt", "old");
+            var changed = Pair("待更新子文件变化"); Put(changed.M, "a.txt", "newer", 3); Put(changed.C, "a.txt", "old");
             var stale = Engine.Analyze(changed.M, changed.C, "原处保留"); Put(changed.C, "a.txt", "CHANGED", 2);
             refused = false; try { Engine.Execute(stale, false); } catch (Exception ex) { refused = ex.Message.Contains("发生变化"); }
             Check(refused && File.ReadAllText(System.IO.Path.Combine(changed.C, "a.txt")) == "CHANGED", "关闭复核仍拒绝覆盖大小或时间已变化的目标");

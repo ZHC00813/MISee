@@ -9,7 +9,7 @@ namespace GreenFolder;
 
 public enum ComparisonKind { Quick, CachedContent, FullContent }
 public sealed record CompareOptions(ComparisonKind Kind = ComparisonKind.Quick, bool ReuseHashes = true, bool TrackChanges = true, bool ReuseMoves = true);
-public sealed record ExecutionOptions(bool Revalidate = false, bool VerifyWrites = true);
+public sealed record ExecutionOptions(bool Revalidate = false, bool VerifyWrites = true, bool RecordsInChild = true);
 public sealed class ScanStatistics
 {
     public long EnumeratedFiles, HashedFiles, ReadBytes, HashHits, ReusedEntries, ChangedPaths;

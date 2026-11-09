@@ -22,10 +22,10 @@ internal static class SmartTest
         try
         {
             var pair = Pair("局部操作");
-            Put(pair.M, "nested\\update.txt", "new", 3); Put(pair.C, "nested\\update.txt", "old");
+            Put(pair.M, "nested\\update.txt", "newer", 3); Put(pair.C, "nested\\update.txt", "old");
             Put(pair.M, "same.txt", "same"); Put(pair.C, "same.txt", "same");
             Put(pair.M, "add.txt", "added-long"); Put(pair.M, "moved.txt", "move"); Put(pair.C, "old-name.txt", "move");
-            Put(pair.M, "newer.txt", "old"); Put(pair.C, "newer.txt", "new", 3);
+            Put(pair.M, "newer.txt", "older"); Put(pair.C, "newer.txt", "new", 3);
             Put(pair.C, "unique.txt", "keep-this-unique");
             var originalM = Directory.GetFiles(pair.M, "*", SearchOption.AllDirectories).ToDictionary(x => x, Hash);
             var p = Engine.Analyze(pair.M, pair.C, "原处保留", quick);
@@ -35,7 +35,7 @@ internal static class SmartTest
             Check(noMoves.Items.Any(x => x.Action == "新增" && x.Path == "moved.txt") && noMoves.Items.Any(x => x.Path == "old-name.txt" && x.Action == "保留"), "关闭复用后选择复制并原处保留旧路径");
             var work = new List<WorkProgress>();
             string record = Engine.Execute(p, new ExecutionOptions(), detail: work.Add);
-            Check(File.ReadAllText(System.IO.Path.Combine(pair.C, "nested\\update.txt")) == "new" && File.ReadAllText(System.IO.Path.Combine(pair.C, "add.txt")) == "added-long", "快速比对后完成局部新增和更新");
+            Check(File.ReadAllText(System.IO.Path.Combine(pair.C, "nested\\update.txt")) == "newer" && File.ReadAllText(System.IO.Path.Combine(pair.C, "add.txt")) == "added-long", "快速比对后完成局部新增和更新");
             Check(File.ReadAllText(System.IO.Path.Combine(record, "更新前备份\\nested\\update.txt")) == "old", "覆盖前备份并核验原版本");
             Check(File.ReadAllText(System.IO.Path.Combine(pair.C, "unique.txt")) == "keep-this-unique" && File.ReadAllText(System.IO.Path.Combine(pair.C, "newer.txt")) == "new", "独有资料和较新子版本保留");
             Check(originalM.All(x => Hash(x.Key) == x.Value), "母本内容始终未修改");
@@ -56,12 +56,12 @@ internal static class SmartTest
             }
             Check(Engine.LastScan.EnumeratedFiles == 0 && Engine.LastScan.ReadBytes == 0 && stable.Items.Count == 0, "监控稳定后无变化比对跳过文件元数据读取与内容读取："+Engine.LastScan+"；差异="+stable.Items.Count);
             string folder = System.IO.Path.Combine(pair.M, "a"); DateTime folderTime = Directory.GetLastWriteTimeUtc(folder);
-            Put(pair.M, "a\\b\\file.txt", "BBBB", 3); Directory.SetLastWriteTimeUtc(folder, folderTime);
+            Put(pair.M, "a\\b\\file.txt", "BBBBB", 3); Directory.SetLastWriteTimeUtc(folder, folderTime);
             Thread.Sleep(250);
             var changed = Engine.Analyze(pair.M, pair.C, "原处保留", cached);
             Check(changed.Items.Any(x => x.Action == "更新") && Directory.GetLastWriteTimeUtc(folder) == folderTime, "祖先文件夹时间未变时仍能发现深层文件内容更新");
             Check(Engine.LastScan.HashedFiles == 1 && Engine.LastScan.EnumeratedFiles < 2, "深层单文件修改只读取其新内容并复用另一边");
-            Put(pair.M, "a\\b\\file.txt", "CCCC", 3); Thread.Sleep(250);
+            Put(pair.M, "a\\b\\file.txt", "CCCCC", 3); Thread.Sleep(250);
             var sameStamp = Engine.Analyze(pair.M, pair.C, "原处保留", cached);
             Check(sameStamp.M["a\\b\\file.txt"].Hash == Hash(System.IO.Path.Combine(pair.M, "a\\b\\file.txt")) && Engine.LastScan.HashedFiles == 1, "在线变更通知使同大小同时间修改的旧指纹失效");
             Directory.Move(System.IO.Path.Combine(pair.M, "a"), System.IO.Path.Combine(pair.M, "renamed")); Thread.Sleep(250);
@@ -74,10 +74,6 @@ internal static class SmartTest
             Directory.Delete(System.IO.Path.Combine(pair.M, "replace"), true); Put(pair.M, "replace\\new.txt", "new"); Thread.Sleep(250);
             var replaced = Engine.Analyze(pair.M, pair.C, "原处保留", cached);
             Check(replaced.M.ContainsKey("replace\\new.txt") && !replaced.M.ContainsKey("replace\\old.txt"), "同名目录删除再建也会重查内容，不能因目录已在索引中而跳过");
-            // Isolate loss recovery from delayed source-tree notifications: a safe
-            // fallback on that tree must not change this test's exact read counts.
-            pair = Pair("通知丢失回退"); Put(pair.C, "cached.txt", "cached-content");
-            Engine.Analyze(pair.M, pair.C, "原处保留", cached);
             Engine.InvalidateIndex(pair.C);
             Engine.Analyze(pair.M, pair.C, "原处保留", cached);
             Check(Engine.LastScan.EnumeratedFiles == 1 && Engine.LastScan.HashedFiles == 1, "通知丢失时退回元数据扫描并拒绝信任旧指纹");
@@ -87,13 +83,13 @@ internal static class SmartTest
             Check(fastConflict.Items.Count == 0 && Engine.LastScan.ReadBytes == 0, "明确快速模式边界：无指纹的同大小同时间文件按一致处理");
             bool refused = false;
             try { Engine.Execute(fastConflict, new ExecutionOptions(true)); } catch(IOException ex) { refused = ex.Message.Contains("内容冲突"); }
-            Check(refused, "可选完整复核可发现快速模式未检查的隐藏冲突并停止");
+            Check(!refused, "完整复核遵守同路径同大小规则，不因两边内容不同停止");
             var fullConflict = Engine.Analyze(pair.M, pair.C, "原处保留", full);
-            Check(fullConflict.Items.Single().Action == "冲突" && Engine.LastScan.HashedFiles == 2, "完整内容模式无条件重读并发现同大小同时间冲突");
+            Check(fullConflict.Items.Count == 0 && Engine.LastScan.HashedFiles == 2, "完整内容模式重读指纹但同大小仍按一致处理");
             var cachedConflict = Engine.Analyze(pair.M, pair.C, "原处保留", quick);
-            Check(cachedConflict.Items.Single().Action == "冲突" && Engine.LastScan.ReadBytes == 0, "快速模式可利用已有双方指纹直接发现隐藏冲突");
+            Check(cachedConflict.Items.Count == 0 && Engine.LastScan.ReadBytes == 0, "快速模式即使已有不同指纹也遵守同大小规则");
             record = Engine.Execute(cachedConflict, new ExecutionOptions());
-            Check(File.ReadAllText(System.IO.Path.Combine(pair.C, "a.txt")) == "BBBB" && File.ReadAllText(System.IO.Path.Combine(record, "同日期冲突_母版本\\a.txt")) == "AAAA", "冲突双方均保留并校验另存母版本");
+            Check(File.ReadAllText(System.IO.Path.Combine(pair.C, "a.txt")) == "BBBB" && !Directory.Exists(System.IO.Path.Combine(record, "同日期冲突_母版本")), "同大小文件保持子本内容，不生成冲突副本");
 
             pair = Pair("持久索引与恢复"); Put(pair.M, "a.txt", "persist"); Put(pair.C, "a.txt", "persist");
             Engine.Analyze(pair.M, pair.C, "原处保留", cached); Engine.CloseIndexes();
@@ -153,3 +149,4 @@ internal static class SmartTest
         finally { Engine.CloseIndexes(); Engine.IndexDirectory = previous; File.WriteAllLines(output, notes); }
     }
 }
+

@@ -37,12 +37,12 @@ internal static class IntegrationTest
         try
         {
             notes.Add("独立测试目录：" + root);
-            notes.Add("只使用自行生成的资料，不读取用户实际母/子文件夹。实际数据规模约 176 MiB 加 1200 个小文件，另用 2 TiB 数值验证大容量进度和时间计算，不声称完成 1 TiB 实盘测试。");
+            notes.Add("只使用自行生成的资料，不读取用户实际母/子文件夹。实际数据规模约 177 MiB 加 1200 个小文件，另用 2 TiB 数值验证大容量进度和时间计算，不声称完成 1 TiB 实盘测试。");
             var pair = Pair("正常更新");
-            Binary(pair.M, "更新.bin", 64, 1, 3); Binary(pair.C, "更新.bin", 64, 2, 1);
+            Binary(pair.M, "更新.bin", 65, 1, 3); Binary(pair.C, "更新.bin", 64, 2, 1);
             Binary(pair.M, "新增.bin", 32, 3, 2);
             Binary(pair.M, "目录/复用.bin", 8, 4, 2); Binary(pair.C, "散落/改名.bin", 8, 4, 1);
-            Put(pair.M, "子版较新.txt", "old", 1); Put(pair.C, "子版较新.txt", "new", 3);
+            Put(pair.M, "子版较新.txt", "older", 1); Put(pair.C, "子版较新.txt", "new", 3);
             Put(pair.M, "同日期冲突.txt", "mother", 2); Put(pair.C, "同日期冲突.txt", "child", 2);
             Put(pair.C, "独有.txt", "extra", 1);
             for (int i = 0; i < 1200; i++) { Put(pair.M, $"小文件/{i:D4}.txt", "same" + i, 1); if (i % 3 != 0) Put(pair.C, $"小文件/{i:D4}.txt", "same" + i, 2); }
@@ -58,7 +58,7 @@ internal static class IntegrationTest
             var executeStates = new List<WorkProgress>(); timer.Restart();
             string record = Engine.Execute(plan, detail: executeStates.Add);
             double executionSeconds = timer.Elapsed.TotalSeconds;
-            Check(Hash(System.IO.Path.Combine(pair.M, "更新.bin")) == Hash(System.IO.Path.Combine(pair.C, "更新.bin")), "64 MiB 文件成功覆盖更新");
+            Check(Hash(System.IO.Path.Combine(pair.M, "更新.bin")) == Hash(System.IO.Path.Combine(pair.C, "更新.bin")), "65 MiB 文件成功覆盖更新");
             Check(Hash(System.IO.Path.Combine(record, "更新前备份", "更新.bin")) == oldHash, "覆盖更新前旧内容完整备份");
             Check(Hash(System.IO.Path.Combine(pair.M, "新增.bin")) == Hash(System.IO.Path.Combine(pair.C, "新增.bin")), "32 MiB 缺失文件成功补齐");
             Check(File.Exists(System.IO.Path.Combine(pair.C, "目录", "复用.bin")) && !File.Exists(System.IO.Path.Combine(pair.C, "散落", "改名.bin")), "相同内容成功移动并改名");

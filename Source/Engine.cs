@@ -152,8 +152,7 @@ public static partial class Engine
             cancellation.ThrowIfCancellationRequested();
             if (p.C.TryGetValue(rel, out var cs))
             {
-                if (ms.Hash.Length > 0 && ms.Hash == cs.Hash || ms.Hash.Length == 0 && cs.Hash.Length == 0 && ms.Size == cs.Size && ms.Time == cs.Time) continue;
-                if (p.QuickComparison && ms.Size == cs.Size && ms.Time == cs.Time && (ms.Hash.Length == 0 || cs.Hash.Length == 0)) continue;
+                if (ms.Size == cs.Size) continue; // Same relative path and byte length are considered identical.
                 if (ms.Time > cs.Time) Add("更新", rel, "母文件夹较新；原文件先备份");
                 else if (ms.Time < cs.Time) Add("保留", rel, "子文件夹较新，保留现有版本");
                 else Add("冲突", rel, "日期相同但内容不同；保留子版本，将母版本另存到记录目录");
@@ -274,13 +273,21 @@ public static partial class Engine
         }
     }
     public static string Execute(Plan p, bool revalidate, Action<string>? progress = null, CancellationToken cancellation = default, Action<WorkProgress>? detail = null)
-        => ExecuteCore(p, revalidate, false, progress, cancellation, detail);
+        => ExecuteCore(p, revalidate, false, true, progress, cancellation, detail);
     public static string Execute(Plan p, ExecutionOptions options, Action<string>? progress = null, CancellationToken cancellation = default, Action<WorkProgress>? detail = null)
-        => ExecuteCore(p, options.Revalidate, options.VerifyWrites, progress, cancellation, detail);
-    static string ExecuteCore(Plan p, bool revalidate, bool verify, Action<string>? progress, CancellationToken cancellation, Action<WorkProgress>? detail)
+        => ExecuteCore(p, options.Revalidate, options.VerifyWrites, options.RecordsInChild, progress, cancellation, detail);
+    internal static string LocalRecordsDirectory = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MISee", "Records");
+    static string ExecuteCore(Plan p, bool revalidate, bool verify, bool recordsInChild, Action<string>? progress, CancellationToken cancellation, Action<WorkProgress>? detail)
     {
         Validate(p.Master, p.Child);
         cancellation.ThrowIfCancellationRequested();
+        string externalRoot = System.IO.Path.GetFullPath(LocalRecordsDirectory);
+        if (!recordsInChild)
+        {
+            if (new[]{p.Master,p.Child}.Any(root => Full(externalRoot).StartsWith(Full(root),StringComparison.OrdinalIgnoreCase) || Full(root).StartsWith(Full(externalRoot),StringComparison.OrdinalIgnoreCase)))
+                throw new IOException("本机记录目录与所选文件夹重叠，请更换文件夹或开启在子文件夹内保存记录。");
+            CheckPath(System.IO.Path.GetPathRoot(externalRoot)!, System.IO.Path.GetRelativePath(System.IO.Path.GetPathRoot(externalRoot)!, externalRoot));
+        }
         var rows = p.Items.Where(x => x.Selected && x.Action != "保留").ToArray();
         string driveRoot = System.IO.Path.GetPathRoot(p.Child)!;
         if (!driveRoot.StartsWith("\\\\", StringComparison.Ordinal))
@@ -291,6 +298,13 @@ public static partial class Engine
                 throw new IOException($"子文件夹所在磁盘空间不足。更新与备份至少需要约 {required / 1073741824d:F2} GiB，可用 {drive.AvailableFreeSpace / 1073741824d:F2} GiB。");
         }
         long executionWork = rows.Sum(x => CopyBytes(p, x) * (verify ? 2 : 1) + (verify && x.Action == "移动" ? p.M[x.Path].Size : 0) + WorkMeter.ItemUnit) + 1;
+        if (!recordsInChild)
+        {
+            long backupBytes = rows.Sum(x => x.Action == "更新" ? p.C[x.Path].Size : x.Action == "冲突" ? p.M[x.Path].Size : 0);
+            var backupDrive = new DriveInfo(System.IO.Path.GetPathRoot(externalRoot)!);
+            if (backupDrive.IsReady && backupDrive.AvailableFreeSpace < backupBytes)
+                throw new IOException("本机记录所在磁盘空间不足，无法保存更新前备份。");
+        }
         WorkMeter meter;
         if (revalidate)
         {
@@ -300,8 +314,6 @@ public static partial class Engine
             var (mf, md) = HashInventory(masterFiles, meter, "执行 1/2：重新校验（尚未更新）", cancellation);
             var (cf, cd) = HashInventory(childFiles, meter, "执行 1/2：重新校验（尚未更新）", cancellation);
             if (!Same(p.M, mf) || !Same(p.C, cf) || !p.MD.SetEquals(md) || !p.CD.SetEquals(cd)) throw new Exception("文件夹在对比后发生了变化，请重新分析。");
-            if (p.QuickComparison && p.M.Any(x => p.C.TryGetValue(x.Key, out var old) && x.Value.Size == old.Size && x.Value.Time == old.Time && (x.Value.Hash.Length == 0 || old.Hash.Length == 0) && mf[x.Key].Hash != cf[x.Key].Hash))
-                throw new IOException("完整复核发现快速比对未检查的同时间同大小内容冲突，请选择完整内容比对后重试。");
         }
         else
         {
@@ -310,13 +322,14 @@ public static partial class Engine
         }
         cancellation.ThrowIfCancellationRequested();
         string id = DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6];
-        string record = System.IO.Path.Combine(EnsureOwned(p.Child, Records), id);
+        string record = System.IO.Path.Combine(recordsInChild ? EnsureOwned(p.Child, Records) : externalRoot, id);
         Directory.CreateDirectory(record);
         File.WriteAllText(System.IO.Path.Combine(record, "操作计划.json"), JsonSerializer.Serialize(p.Items, new JsonSerializerOptions { WriteIndented = true }));
         string extra = System.IO.Path.Combine(p.Child, Extras, id);
         if (p.Mode == "移到额外资料") { EnsureOwned(p.Child, Extras); Directory.CreateDirectory(extra); }
         using var log = new StreamWriter(System.IO.Path.Combine(record, "执行记录.txt"), false) { AutoFlush = true };
         log.WriteLine($"母文件夹：{p.Master}\n子文件夹：{p.Child}\n开始时间：{DateTime.Now:O}");
+        log.WriteLine("记录位置：" + (recordsInChild ? "子文件夹内" : "本机应用数据目录") + " | " + record);
         log.WriteLine(revalidate ? "更新前重新校验：开启（完整内容）" : "更新前重新校验：关闭（跳过整库内容复核，仅检查待操作文件的大小、修改时间与路径）");
         log.WriteLine("比对方式：" + p.ScanDescription + "\n更新后内容校验：" + (verify ? "开启，仅检查实际操作目标" : "关闭"));
         int completed = 0;

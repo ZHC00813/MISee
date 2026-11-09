@@ -3,7 +3,6 @@
     <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
     <AssemblyName>咪看看（MISee）</AssemblyName><ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <Product>咪看看（MISee）</Product><Title>咪看看（MISee）</Title><Version>0.7.0</Version>
-    <PathMap>$(MSBuildProjectDirectory)=/_/src</PathMap>
+    <Product>咪看看（MISee）</Product><Title>咪看看（MISee）</Title><Version>0.9.0</Version>
   </PropertyGroup>
 </Project>

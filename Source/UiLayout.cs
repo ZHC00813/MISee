@@ -3,6 +3,7 @@ namespace GreenFolder;
 public partial class MainForm
 {
     readonly ModernButton advanced = new(), records = new();
+    readonly ModernButton selectAll = new(), selectNone = new(), invertSelection = new();
     readonly TextBox search = new() { PlaceholderText = "搜索文件或路径" };
     readonly ComboBox actionFilter = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     readonly Label emptyState = new();
@@ -15,7 +16,7 @@ public partial class MainForm
     Label Caption(string text) => new() { Text=text,AutoSize=false,Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=UiTheme.Muted,Font=new Font(Font.FontFamily,10.5F) };
     void InitializeVisuals()
     {
-        Text="MISee · 文件夹比对与更新 v0.7"; AutoScaleDimensions=new SizeF(96,96); AutoScaleMode=AutoScaleMode.Dpi;
+        Text="MISee · 文件夹比对与更新 v0.9"; AutoScaleDimensions=new SizeF(96,96); AutoScaleMode=AutoScaleMode.Dpi;
         Font=new Font("Microsoft YaHei UI",11.5F,FontStyle.Regular,GraphicsUnit.Point);
         ForeColor=UiTheme.Ink; BackColor=UiTheme.Canvas; ClientSize=new Size(1220,860); MinimumSize=new Size(960,680);
         StartPosition=FormStartPosition.CenterScreen;
@@ -33,7 +34,7 @@ public partial class MainForm
         header.Controls.Add(logo);
         header.Controls.Add(new Label { Text="MISee",AutoSize=true,Location=new Point(56,-1),Font=new Font("Segoe UI",23,FontStyle.Bold),ForeColor=UiTheme.Ink });
         header.Controls.Add(new Label { Text="文件夹比对与局部更新",AutoSize=true,Location=new Point(57,36),Font=new Font(Font.FontFamily,10.5F),ForeColor=UiTheme.Muted });
-        var protection=new Label { Text="v0.7  ·  母本只读  ·  覆盖前备份",AutoSize=false,Anchor=AnchorStyles.Top|AnchorStyles.Right,Size=new Size(370,42),TextAlign=ContentAlignment.MiddleRight,ForeColor=UiTheme.Muted,Font=new Font(Font.FontFamily,10.5F) };
+        var protection=new Label { Text="v0.9  ·  母本只读  ·  覆盖前备份",AutoSize=false,Anchor=AnchorStyles.Top|AnchorStyles.Right,Size=new Size(370,42),TextAlign=ContentAlignment.MiddleRight,ForeColor=UiTheme.Muted,Font=new Font(Font.FontFamily,10.5F) };
         header.Controls.Add(protection); header.SizeChanged+=(_,_)=>protection.Left=header.ClientSize.Width-protection.Width;
         workspace.Controls.Add(header,0,0);
 
@@ -46,7 +47,7 @@ public partial class MainForm
         var settings=new TableLayoutPanel { Dock=DockStyle.Fill,ColumnCount=4,RowCount=1,Margin=new Padding(0,0,0,14) };
         settings.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         foreach(float weight in new[]{42f,27f,15f,16f}) settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,weight));
-        comparison.Items.AddRange(new object[]{"快速：时间、大小＋按需校验","缓存内容：只读变化或未缓存的文件","完整内容：重新读取所有文件"}); comparison.SelectedIndex=0;
+        comparison.Items.AddRange(new object[]{"快速：同路径同大小视为相同","缓存内容：只读变化或未缓存的文件","完整内容：重新读取所有文件"}); comparison.SelectedIndex=0;
         mode.DropDownStyle=ComboBoxStyle.DropDownList; mode.Items.AddRange(new object[]{"移到额外资料","删除到回收站","原处保留"}); mode.SelectedIndex=2;
         settings.Controls.Add(Field("比对方式",comparison),0,0); settings.Controls.Add(Field("子文件夹独有资料",mode),1,0);
         SetupButton(advanced,"高级设置 ＋",()=>ToggleAdvanced()); advanced.Dock=DockStyle.Fill; advanced.Margin=new Padding(0,24,12,0); settings.Controls.Add(advanced,2,0);
@@ -57,8 +58,10 @@ public partial class MainForm
         var options=new RoundedPanel { Dock=DockStyle.Fill,Padding=new Padding(16,10,16,10),Margin=Padding.Empty };
         var optionRows=new FlowLayoutPanel { Dock=DockStyle.Fill,WrapContents=true };
         reuseHashes.Text="复用文件指纹缓存"; trackChanges.Text="仅刷新有变化的部分"; reuseMoves.Text="按内容复用已有文件";
-        foreach(var option in new[]{reuseHashes,trackChanges,reuseMoves,recheck,verifyWrites}) { option.Margin=new Padding(0,5,24,9); optionRows.Controls.Add(option); }
-        optionRows.SetFlowBreak(reuseMoves,true); optionRows.SetFlowBreak(verifyWrites,true);
+        foreach(var option in new[]{reuseHashes,trackChanges,reuseMoves,recheck,verifyWrites,recordsInChild}) { option.Margin=new Padding(0,5,24,9); optionRows.Controls.Add(option); }
+        optionRows.SetFlowBreak(reuseMoves,true); optionRows.SetFlowBreak(recordsInChild,true);
+        tips.SetToolTip(recordsInChild,"取消勾选后，不在子文件夹创建新的 .MISee记录；日志与备份改存本机 %LOCALAPPDATA%\\MISee\\Records。已有记录不删除，额外资料归档按原设置执行。");
+        recordsInChild.CheckedChanged+=(_,_)=>{if(!busy)status.Text=recordsInChild.Checked?"记录和备份保存在子文件夹内。":"记录和备份改存本机，可在完成后点击“打开记录”。";};
         SetupButton(clearCache,"重建本机索引",()=>{try{Engine.ClearIndexes();InvalidatePlan();status.Text="本机索引已清理，下次比对重新收集。";}catch(Exception ex){Notify(ex.Message,"无法清理索引",MessageBoxIcon.Warning);}});
         SetupButton(quick,"一键比对并更新",async()=>await Analyze(true));
         clearCache.Size=new Size(145,34); quick.Size=new Size(172,34); clearCache.Margin=new Padding(0,0,12,0); quick.Margin=Padding.Empty;
@@ -71,8 +74,8 @@ public partial class MainForm
         recheck.CheckedChanged+=(_,_)=>{if(!busy)status.Text=recheck.Checked?"更新前将完整复核两边内容。":"更新前跳过整库复核，保留逐项检查。";};
 
         var results=new RoundedPanel { Dock=DockStyle.Fill,Padding=new Padding(18,12,18,12),Margin=new Padding(0,0,0,0) };
-        var resultLayout=new TableLayoutPanel { Dock=DockStyle.Fill,ColumnCount=1,RowCount=2,Margin=Padding.Empty };
-        resultLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,68)); resultLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        var resultLayout=new TableLayoutPanel { Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Margin=Padding.Empty };
+        resultLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,68)); resultLayout.RowStyles.Add(new RowStyle(SizeType.Absolute,44)); resultLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         var resultHead=new TableLayoutPanel { Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,Margin=Padding.Empty };
         resultHead.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100)); resultHead.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,140)); resultHead.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,212));
         var title=new Panel { Dock=DockStyle.Fill,Margin=Padding.Empty };
@@ -86,10 +89,17 @@ public partial class MainForm
         searchLayout.RowStyles.Add(new RowStyle(SizeType.Percent,100));searchLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,50));searchLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         var searchCaption=Caption("搜索");searchCaption.Margin=Padding.Empty;searchLayout.Controls.Add(searchCaption,0,0);search.BorderStyle=BorderStyle.None;search.Dock=DockStyle.Fill;search.Margin=Padding.Empty;searchLayout.Controls.Add(search,1,0);searchFrame.Controls.Add(searchLayout);resultHead.Controls.Add(searchFrame,2,0);
         resultLayout.Controls.Add(resultHead,0,0);
+        var selectionBar=new FlowLayoutPanel { Dock=DockStyle.Fill,Margin=Padding.Empty,WrapContents=false };
+        SetupButton(selectAll,"全选",()=>SelectVisible(1));
+        SetupButton(selectNone,"全不选",()=>SelectVisible(0));
+        SetupButton(invertSelection,"反选",()=>SelectVisible(-1));
+        foreach(var button in new[]{selectAll,selectNone,invertSelection}) { button.Size=new Size(88,34);button.Margin=new Padding(0,0,10,8);selectionBar.Controls.Add(button); }
+        selectionBar.Controls.Add(new Label { Text="仅作用于当前显示的项目",AutoSize=true,ForeColor=UiTheme.Muted,Margin=new Padding(4,7,0,0),Font=new Font(Font.FontFamily,10F) });
+        resultLayout.Controls.Add(selectionBar,0,1);
         var resultBody=new Panel { Dock=DockStyle.Fill,Margin=Padding.Empty };
         ConfigureGrid(); resultBody.Controls.Add(grid);
         emptyState.Text="把两个文件夹放到上方，开始查看需要更新的内容。"; emptyState.Dock=DockStyle.Fill; emptyState.TextAlign=ContentAlignment.MiddleCenter; emptyState.ForeColor=UiTheme.Muted; emptyState.BackColor=Color.White;
-        resultBody.Controls.Add(emptyState); resultLayout.Controls.Add(resultBody,0,1); results.Controls.Add(resultLayout); workspace.Controls.Add(results,0,4);
+        resultBody.Controls.Add(emptyState); resultLayout.Controls.Add(resultBody,0,2); results.Controls.Add(resultLayout); workspace.Controls.Add(results,0,4);
         actionFilter.SelectedIndexChanged+=(_,_)=>FilterRows(); search.TextChanged+=(_,_)=>FilterRows();
 
         var task=new RoundedPanel { Dock=DockStyle.Fill,Padding=new Padding(18,14,18,12),Margin=new Padding(0,16,0,0) };
@@ -216,12 +226,22 @@ public partial class MainForm
         if(displayedItems.Count>0)summary.Text=$"共 {displayedItems.Count:N0} 项差异 · 显示 {rows.Count:N0} 项 · 勾选 {displayedItems.Count(x=>x.Selected&&x.Action!="保留"):N0} 项";
         UpdateActionState();
     }
+    void SelectVisible(int selection)
+    {
+        if(busy)return;
+        CommitGrid();rebinding=true;
+        try { foreach(DataGridViewRow row in grid.Rows) if(row.DataBoundItem is Change item) item.Selected=selection<0?!item.Selected:selection==1; }
+        finally { rebinding=false; }
+        grid.Refresh();UpdateActionState();
+    }
     void UpdateActionState()
     {
         int selected=plan?.Items.Count(x=>x.Selected&&x.Action!="保留")??0;
         if(plan!=null&&displayedItems.Count>0)summary.Text=$"共 {displayedItems.Count:N0} 项差异 · 显示 {grid.Rows.Count:N0} 项 · 勾选 {selected:N0} 项";
         execute.Enabled=!busy&&plan!=null&&selected>0;execute.Text=selected>0?$"执行更新（{selected:N0}）":"执行更新";
         ((ModernButton)execute).Tone=ButtonTone.Primary;((ModernButton)preview).Tone=plan==null?ButtonTone.Primary:ButtonTone.Secondary;
+        selectAll.Enabled=selectNone.Enabled=invertSelection.Enabled=!busy&&grid.Rows.Count>0;
         records.Enabled=!busy&&lastRecord!=null;advanced.Enabled=!busy;actionFilter.Enabled=search.Enabled=!busy;
     }
 }
+

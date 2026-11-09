@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('self', 'performance', 'integration', 'option', 'smart', 'ui', 'layout')]
-    [string[]]$Suites = @('self', 'performance', 'integration', 'option', 'smart', 'ui', 'layout'),
+    [ValidateSet('self', 'performance', 'integration', 'option', 'smart', 'ui', 'layout', 'size', 'record')]
+    [string[]]$Suites = @('self', 'performance', 'integration', 'option', 'smart', 'ui', 'layout', 'size', 'record'),
     [switch]$SkipBuild
 )
 

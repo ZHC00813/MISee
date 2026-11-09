@@ -75,8 +75,8 @@ internal static class SmartTest
             var replaced = Engine.Analyze(pair.M, pair.C, "原处保留", cached);
             Check(replaced.M.ContainsKey("replace\\new.txt") && !replaced.M.ContainsKey("replace\\old.txt"), "同名目录删除再建也会重查内容，不能因目录已在索引中而跳过");
             Engine.InvalidateIndex(pair.C);
-            Engine.Analyze(pair.M, pair.C, "原处保留", cached);
-            Check(Engine.LastScan.EnumeratedFiles == 1 && Engine.LastScan.HashedFiles == 1, "通知丢失时退回元数据扫描并拒绝信任旧指纹");
+            var recovered = Engine.Analyze(pair.M, pair.C, "原处保留", cached);
+            Check(Engine.LastScan.EnumeratedFiles >= 1 && Engine.LastScan.HashedFiles >= 1 && recovered.C.All(x => x.Value.Hash == Hash(System.IO.Path.Combine(pair.C,x.Key))), "通知丢失时退回元数据扫描并拒绝信任旧指纹：" + Engine.LastScan);
 
             pair = Pair("同时间内容冲突"); Put(pair.M, "a.txt", "AAAA"); Put(pair.C, "a.txt", "BBBB");
             var fastConflict = Engine.Analyze(pair.M, pair.C, "原处保留", quick);

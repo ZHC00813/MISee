@@ -17,7 +17,7 @@ $results = foreach ($suite in $Suites) {
     $report = Join-Path $reports ($suite + '.txt')
     $process = Start-Process -FilePath $apps[0].FullName -ArgumentList @("--$suite-test", ('"' + $report + '"')) -WindowStyle Hidden -Wait -PassThru
     if (-not (Test-Path -LiteralPath $report)) { throw "No report for $suite; process exit code: $($process.ExitCode)." }
-    if ($process.ExitCode -ne 0) { Get-Content -LiteralPath $report; throw "$suite test failed." }
+    if ($process.ExitCode -ne 0) { Get-Content -LiteralPath $report | ForEach-Object { Write-Host $_ }; throw "$suite test failed." }
     $passed = @(Get-Content -LiteralPath $report | Where-Object { $_.StartsWith('PASS:') }).Count
     Write-Host "$suite : $passed assertions passed"
     [pscustomobject]@{ Suite = $suite; Passed = $passed }
